@@ -15,7 +15,7 @@
 11. Boot the Ultra96v2 from the SD Card
 12. Set up networking on the Ultra96v2 for ssh access
 13. Install gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu cross-compiler
-14. Cross-compile code and scp to the Ultra96v2
+14. Cross-compile test code and scp to the Ultra96v2
 15. SSH into the Ultra96v2 and run code
 
 ## Detailed Steps
@@ -81,11 +81,20 @@ Let's explain the 3 main configuration menus for PetaLinux projects before proce
   petalinux-config -c rootfs
   ```
 
+#### ⚠️ Important Configuration Changes
 2. Next, re-enter the main configuration menu by running:
    ```bash
    petalinux-config
    ```
-   In this menu, navigate to "Image Packaging Configuration" -> Root filesystem type, and set it to "ext4". Then press the Esc key to go back to the main menu, and save and exit.
+   - In this menu, navigate to "Image Packaging Configuration" -> Root filesystem type, and set it to "ext4". Then press the Esc key to go back to the main menu.
+
+   - Next, navigate to "Yocto Settings" -> "Yocto Machine Name", and set it to "ultra96v2-zynqmp". Then press the Esc key to go back to the main menu.
+
+   - Next, navigate to "Subsystem Hardware Settings" -> "Serial Settings" and set PMUFW, FSBL, TF-A, and U-boot Serial stdin/stdout to "psu_uart_1" (the Ultra96v2's onboard UART). Then press the Esc key to go back to the main menu.
+
+   - Next, navigate to "Subsystem Hardware Settings" -> "SD/SDIO Settings" and set Primary SD/SDIO to "manual". Then press the Esc key to go back to the main menu.
+
+   - Finally, save and exit the main configuration menu by pressing the Esc key until you are prompted to save, then select "Yes" and press Enter.
 
 3. Next, enter the root filesystem configuration menu by running:
    ```bash
@@ -205,3 +214,94 @@ Without this change, PetaLinux started having issues sometime around 2023 where 
 3. Power on the Ultra96v2. You should see U-Boot messages in the serial terminal, followed by Linux boot messages. It should auto-login as root when the boot process completes.
 
 ### 12. Set up networking on the Ultra96v2 for ssh access
+#### Setting a persistent static IP address for Ethernet on the Ultra96v2
+1. Connect an Ethernet cable from the Ultra96v2 to your network.
+2. On the Ultra96v2 terminal, run the following command:
+   ```bash
+   ip link
+   ```
+   You should see an interface named `enu1u1c2` after plugging in the Ethernet cable. The following image shows an example output of the `ip link` command before and after plugging in the Ethernet cable:
+   ![ip link output before and after plugging in Ethernet cable](images/ip_link.png)
+3. Next, create a new network configuration file for the Ethernet interface by running the following command:
+   ```bash
+   vim /etc/systemd/network/10-static-enu1u1c2.network
+   ```
+4. In the vim editor, press the `i` key to enter insert mode, then paste the following configuration into the file:
+   ```
+   [Match]
+   Name=enu1u1c2
+
+   [Network]
+   Address=192.168.7.2/24
+   ```
+5. Press the `Esc` key to exit insert mode, then type `:wq` and press Enter to save and exit vim. The following image shows what the file should look like afterwards:
+   ![network configuration file contents](images/network_config.png)
+6. Next, restart the systemd-networkd service to apply the new network configuration by running the following command:
+   ```bash
+   systemctl restart systemd-networkd
+   ```
+   Then check that the new IP address has been assigned by running:
+   ```bash
+   ip addr show enu1u1c2
+   ```
+   You should see the IP address `192.168.7.2/24` assigned to the `enu1u1c2` interface.
+#### Permit ssh access to the Ultra96v2 without a password (necessary)
+1. On the Ultra96v2 terminal, run the following command to edit the sshd_config file:
+   ```bash
+   vi /etc/ssh/sshd_config
+   ```
+2. In the vim editor, press the `i` key to enter insert mode, under the line that says `# Authentication:`, paste the following lines to overwrite the default settings shown by the `#` comments:
+   ```
+   PermitRootLogin yes
+   PasswordAuthentication yes
+   PermitEmptyPasswords yes
+   ```
+3. Press the `Esc` key to exit insert mode, then type `:wq` and press Enter to save and exit vim.
+4. Next, restart the sshd service to apply the new ssh configuration by running the following command:
+   ```bash
+   systemctl restart sshd.socket
+   ```
+5. Now, from your host machine, create an ssh configuration for the Ultra96v2 by adding the following lines to your `~/.ssh/config` file (create the file if it doesn't exist):
+   ```
+   Host u96
+    HostName 192.168.7.2
+    User root
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    LogLevel ERROR
+   ```
+   This allows you to ssh into the Ultra96v2 using the command `ssh u96` without being prompted to accept the host key each time. By not saving it as a known_host, you use this same configuration on another Linux setup on the Ultra96v2 without it freaking out about identity changes when you ssh between them.
+6. Save and exit the file.
+7. Now, from your host machine, you should be able to ssh into the Ultra96v2 without a password by running:
+   ```bash
+   ssh u96
+   ```
+
+### 13. Install gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu cross-compiler
+1. On your host machine, navigate to the /tools directory of this DTRA-URA repository.
+2. Run the following command to extract the cross-compiler:
+   ```bash
+   make install_u96_linux_compiler
+   ```
+
+### 14. Cross-compile test code and scp to the Ultra96v2
+For this step, I will assume you have a simple "Hello World" C program saved as `hello.c` in your current directory on your host machine.
+1. On your host machine, compile the `hello.c` program using the cross-compiler by running the following command (replace `<PATH_TO_DTRA_URA>` with the path to your DTRA-URA repository):
+   ```bash
+   <PATH_TO_DTRA_URA>/tools/gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu/bin/aarch64-none-linux-gnu-gcc -o hello hello.c
+   ```
+2. Once the program is compiled, you can copy it to the Ultra96v2 home directory using `scp`:
+   ```bash
+   scp hello u96:~/
+   ```
+
+### 15. SSH into the Ultra96v2 and run code
+1. SSH into the Ultra96v2 from your host machine by running:
+   ```bash
+   ssh u96
+   ```
+2. Once logged in, you should see the `hello` program in your home directory. Run it by executing:
+   ```bash
+   ./hello
+   ```
+3. You should see the output of the program, which should be "Hello, World!"
