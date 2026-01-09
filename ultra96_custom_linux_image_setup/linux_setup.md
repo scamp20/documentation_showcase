@@ -224,11 +224,12 @@ Without this change, PetaLinux started having issues sometime around 2023 where 
    You should see an interface named `enu1u1c2` after plugging in the Ethernet cable. The following image shows an example output of the `ip link` command before and after plugging in the Ethernet cable:
    
    ![ip link output before and after plugging in Ethernet cable](images/ip_link.png)
-4. Next, create a new network configuration file for the Ethernet interface by running the following command:
+   
+3. Next, create a new network configuration file for the Ethernet interface by running the following command:
    ```bash
    vim /etc/systemd/network/10-static-enu1u1c2.network
    ```
-5. In the vim editor, press the `i` key to enter insert mode, then paste the following configuration into the file:
+4. In the vim editor, press the `i` key to enter insert mode, then paste the following configuration into the file:
    ```
    [Match]
    Name=enu1u1c2
@@ -236,10 +237,11 @@ Without this change, PetaLinux started having issues sometime around 2023 where 
    [Network]
    Address=192.168.7.2/24
    ```
-6. Press the `Esc` key to exit insert mode, then type `:wq` and press Enter to save and exit vim. The following image shows what the file should look like afterwards:
+5. Press the `Esc` key to exit insert mode, then type `:wq` and press Enter to save and exit vim. The following image shows what the file should look like afterwards:
 
 ![network configuration file contents](images/network_config.png)
-7. Next, restart the systemd-networkd service to apply the new network configuration by running the following command:
+
+6. Next, restart the systemd-networkd service to apply the new network configuration by running the following command:
    ```bash
    systemctl restart systemd-networkd
    ```
